@@ -13,12 +13,10 @@ final class AppModel: ObservableObject {
     private let regionSelector = RegionSelector()
     private var loopTask: Task<Void, Never>?
     private var analysisTask: Task<Void, Never>?
-    /// 마지막으로 Claude에 보낸 문제(정규화된 텍스트)
-    private var lastAnalyzedText = ""
+    /// 마지막으로 Claude에 보낸(또는 분석 중인) 문제의 정규화된 줄 목록
+    private var lastAnalyzedLines: [String] = []
 
     private static let interval: Duration = .seconds(5)
-    /// 이 값 이상 비슷하면 같은 문제로 간주 (OCR 잡음 흡수)
-    private static let sameThreshold = 0.93
     private static let minQuestionLength = 8
 
     init() {
@@ -43,7 +41,7 @@ final class AppModel: ObservableObject {
             return
         }
         isRunning = true
-        lastAnalyzedText = ""
+        lastAnalyzedLines = []
         menuBarText = "…"
         status = "실행 중"
         loopTask = Task { [weak self] in
@@ -72,7 +70,7 @@ final class AppModel: ObservableObject {
                 guard let self, let region else { return }
                 self.region = region
                 region.save()
-                self.lastAnalyzedText = ""
+                self.lastAnalyzedLines = []
             }
         }
     }
@@ -80,7 +78,7 @@ final class AppModel: ObservableObject {
     func resetRegion() {
         region = nil
         CaptureRegion.clear()
-        lastAnalyzedText = ""
+        lastAnalyzedLines = []
     }
 
     func openScreenRecordingSettings() {
@@ -91,33 +89,45 @@ final class AppModel: ObservableObject {
 
     private func tick() async {
         do {
-            let image = try await ScreenCapturer.capture(region: region)
+            let image = try await ScreenCapturer.capture(region: effectiveRegion())
             let text = try await TextRecognizer.recognize(image)
             guard isRunning, !Task.isCancelled else { return }
 
             ocrPreview = String(text.replacingOccurrences(of: "\n", with: " ").prefix(40))
-            // 분석 중에는 새 호출을 하지 않음. 끝난 뒤 다음 주기에 변화 여부를 다시 판단.
-            guard analysisTask == nil else { return }
 
-            let normalized = TextUtil.normalize(text)
-            guard normalized.count >= Self.minQuestionLength else {
-                status = "문제 텍스트 없음"
+            let lines = TextUtil.lines(text)
+            guard lines.joined().count >= Self.minQuestionLength else {
+                if analysisTask == nil { status = "문제 텍스트 없음" }
                 return
             }
-            if !lastAnalyzedText.isEmpty,
-               TextUtil.similarity(normalized, lastAnalyzedText) >= Self.sameThreshold {
-                status = "변화 없음"
+            guard TextUtil.isNewQuestion(current: lines, previous: lastAnalyzedLines) else {
+                if analysisTask == nil { status = "변화 없음" }
                 return
             }
-            analyze(text: text, normalized: normalized)
+            // 분석 중에 문제가 바뀌면 이전 분석을 버리고 즉시 새 문제를 분석한다
+            analysisTask?.cancel()
+            analysisTask = nil
+            analyze(text: text, lines: lines)
         } catch {
             guard isRunning else { return }
             status = "오류: \(error.localizedDescription)"
         }
     }
 
-    private func analyze(text: String, normalized: String) {
-        lastAnalyzedText = normalized
+    /// 전체 화면 모드에서는 메뉴 막대(시계, 이 앱의 답 표시)를 빼고 캡처한다
+    private func effectiveRegion() -> CaptureRegion? {
+        if let region { return region }
+        let mainID = CGMainDisplayID()
+        guard let screen = NSScreen.screens.first(where: {
+            ($0.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? CGDirectDisplayID) == mainID
+        }) else { return nil }
+        let menuBar = max(0, screen.frame.maxY - screen.visibleFrame.maxY)
+        return CaptureRegion(displayID: mainID,
+                             rect: CGRect(x: 0, y: menuBar, width: screen.frame.width, height: screen.frame.height - menuBar))
+    }
+
+    private func analyze(text: String, lines: [String]) {
+        lastAnalyzedLines = lines
         menuBarText = "…"
         status = "Claude 분석 중…"
         analysisTask = Task { [weak self] in

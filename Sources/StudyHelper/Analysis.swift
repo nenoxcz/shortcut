@@ -51,23 +51,30 @@ enum TextUtil {
         return result
     }
 
-    /// 문자 바이그램 Dice 계수 (0...1)
-    static func similarity(_ a: String, _ b: String) -> Double {
-        if a == b { return 1 }
-        let x = Array(a), y = Array(b)
-        guard x.count > 1, y.count > 1 else { return 0 }
-        var counts: [String: Int] = [:]
-        for i in 0..<(x.count - 1) {
-            counts[String(x[i...i + 1]), default: 0] += 1
-        }
-        var shared = 0
-        for i in 0..<(y.count - 1) {
-            let key = String(y[i...i + 1])
-            if let c = counts[key], c > 0 {
-                shared += 1
-                counts[key] = c - 1
+    /// OCR 결과를 정규화된 줄 목록으로 변환 (빈 줄 제외)
+    static func lines(_ text: String) -> [String] {
+        text.split(whereSeparator: \.isNewline).map { normalize(String($0)) }.filter { !$0.isEmpty }
+    }
+
+    /// 이전에 분석한 화면과 비교해 새 문제인지 판단한다.
+    /// 전체 유사도가 아니라 줄 단위로 비교하므로 화면 대부분이 고정된 UI여도 문제 교체를 잡아낸다.
+    /// 숫자만 바뀐 줄이 하나뿐이면(타이머·시계) 무시하고, 여러 줄이면(계산 문제) 새 문제로 본다.
+    static func isNewQuestion(current: [String], previous: [String]) -> Bool {
+        let old = Set(previous)
+        let oldSkeletons = Set(previous.map(skeleton))
+        var newTextChars = 0
+        var digitOnlyLines = 0
+        for line in current where !old.contains(line) {
+            if oldSkeletons.contains(skeleton(line)) {
+                digitOnlyLines += 1
+            } else {
+                newTextChars += line.count
             }
         }
-        return 2.0 * Double(shared) / Double(x.count - 1 + y.count - 1)
+        return newTextChars >= 4 || digitOnlyLines >= 2
+    }
+
+    private static func skeleton(_ line: String) -> String {
+        line.filter { !$0.isNumber }
     }
 }

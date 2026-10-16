@@ -5,6 +5,7 @@ let package = Package(
     name: "StudyHelper",
     platforms: [.macOS(.v14)],
     targets: [
-        .executableTarget(name: "StudyHelper", path: "Sources/StudyHelper")
+        .executableTarget(name: "StudyHelper", path: "Sources/StudyHelper"),
+        .testTarget(name: "StudyHelperTests", dependencies: ["StudyHelper"], path: "Tests/StudyHelperTests"),
     ]
 )

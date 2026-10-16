@@ -1,0 +1,41 @@
+name: macOS build
+
+on:
+  push:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-15
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Toolchain
+        run: swift --version && sw_vers
+
+      - name: Build app bundle
+        run: ./build.sh
+
+      - name: Vision Korean OCR self-test
+        run: |
+          swift scripts/make_test_image.swift "$RUNNER_TEMP/q.png"
+          ./build/StudyHelper.app/Contents/MacOS/StudyHelper --ocr-test "$RUNNER_TEMP/q.png" | tee "$RUNNER_TEMP/ocr.txt"
+          grep -q "서울" "$RUNNER_TEMP/ocr.txt"
+          grep -q "수도" "$RUNNER_TEMP/ocr.txt"
+
+      - name: Launch smoke test (stays alive 10s)
+        run: |
+          ./build/StudyHelper.app/Contents/MacOS/StudyHelper &
+          PID=$!
+          sleep 10
+          kill -0 "$PID"
+          kill "$PID"
+
+      - name: Package
+        run: cd build && ditto -c -k --keepParent StudyHelper.app StudyHelper.zip
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: StudyHelper
+          path: build/StudyHelper.zip

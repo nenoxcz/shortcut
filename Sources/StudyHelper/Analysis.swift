@@ -1,24 +1,27 @@
 import Foundation
 
 enum Prompt {
-    static func make(ocrText: String) -> String {
+    /// Claude Code 기본(코딩 에이전트) 시스템 프롬프트를 대체한다
+    static let system = """
+        너는 학습 보조 앱의 정답 표시기다. 입력은 사용자가 공부 중인 화면에서 OCR로 읽은 문제와 선택지이며 OCR 오류가 있을 수 있다.
+        출력은 답 하나뿐이어야 한다:
+        - 객관식: 정답 기호 하나만 (①, ②, ③, ④, ⑤ 중 하나)
+        - 단답형: 정답만 15자 이내
+        - 문제가 없거나 판단할 수 없으면: ?
+        설명, 풀이, 문장, 인사, 마크다운, 따옴표를 절대 붙이지 마라.
         """
-        아래는 화면에서 OCR로 추출한 한국어 문제와 선택지입니다. OCR 오류가 있을 수 있습니다.
-        규칙:
-        - 객관식이면 정답 번호 하나를 ①, ②, ③, ④, ⑤ 중에서 고르세요.
-        - 단답형이면 정답을 15자 이내의 짧은 텍스트로 쓰세요.
-        - 문제가 아니거나 판단하기 어려우면 ? 로 답하세요.
-        - 설명 없이 "정답: <답>" 한 줄만 출력하세요.
 
-        [OCR 텍스트]
-        \(ocrText)
-        """
+    /// 머리말을 붙여 OCR 텍스트가 "-"로 시작해도 CLI 옵션으로 해석되지 않게 한다
+    static func make(ocrText: String) -> String {
+        "[OCR 텍스트]\n" + ocrText
     }
 }
 
 enum AnswerParser {
     static let circled: [Character] = ["①", "②", "③", "④", "⑤"]
     private static let trimSet = CharacterSet.whitespaces.union(CharacterSet(charactersIn: ":：*`\"'.,"))
+    private static let refusalMarkers = ["죄송", "할 수 없", "드릴 수 없", "어렵습니다", "sorry", "can't", "cannot", "unable"]
+    private static let maxShortAnswer = 20
 
     /// claude 출력 → 메뉴 막대 표시 문자열 (①~⑤, ?, 또는 짧은 텍스트)
     static func parse(_ output: String) -> String {
@@ -31,6 +34,9 @@ enum AnswerParser {
         }
         answer = answer.trimmingCharacters(in: trimSet)
         if answer.isEmpty || answer.hasPrefix("?") { return "?" }
+        // 답 대신 거절·설명 문장이 오면 메뉴 막대에 문장을 띄우지 않고 ?로 표시
+        let lowered = answer.lowercased()
+        if refusalMarkers.contains(where: { lowered.contains($0) }) { return "?" }
 
         let found = answer.filter { circled.contains($0) }
         if !found.isEmpty { return String(found) }
@@ -39,7 +45,7 @@ enum AnswerParser {
         if bare.count == 1, let n = Int(bare), (1...5).contains(n) {
             return String(circled[n - 1])
         }
-        return String(answer.prefix(15))
+        return answer.count > maxShortAnswer ? "?" : answer
     }
 }
 

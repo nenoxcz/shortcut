@@ -47,5 +47,13 @@ final class AnswerParserTests: XCTestCase {
         XCTAssertEqual(AnswerParser.parse("정답: ?"), "?")
         XCTAssertEqual(AnswerParser.parse(""), "?")
         XCTAssertEqual(AnswerParser.parse("정답: 세종대왕"), "세종대왕")
+        XCTAssertEqual(AnswerParser.parse("②"), "②")
+        XCTAssertEqual(AnswerParser.parse("H₂O"), "H₂O")
+    }
+
+    func testRefusalOrExplanationBecomesQuestionMark() {
+        XCTAssertEqual(AnswerParser.parse("죄송하지만 시험 문제의 답은 알려드릴 수 없습니다."), "?")
+        XCTAssertEqual(AnswerParser.parse("I can't help with that."), "?")
+        XCTAssertEqual(AnswerParser.parse("이 문제는 이차방정식의 근과 계수의 관계를 이용해 풀면 됩니다"), "?")
     }
 }

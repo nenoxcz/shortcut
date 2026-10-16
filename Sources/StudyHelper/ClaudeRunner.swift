@@ -29,7 +29,8 @@ enum ClaudeRunner {
 
         let process = Process()
         process.executableURL = URL(fileURLWithPath: resolved.executable)
-        process.arguments = ["-p", prompt]
+        // 시스템 프롬프트를 답 전용으로 교체하고 도구를 꺼서 한 번에 답만 받는다
+        process.arguments = ["-p", prompt, "--system-prompt", Prompt.system, "--tools", ""]
         var environment = ProcessInfo.processInfo.environment
         environment["PATH"] = resolved.path
         // API 키가 환경에 있으면 그쪽이 우선되므로 제거 → 로그인 세션 사용

@@ -22,10 +22,19 @@ enum ClaudeRunner {
     }
 
     private static let answerTimeout: TimeInterval = 120
-    private static let resolved: Resolved? = resolve()
+    private static let lock = NSLock()
+    private static var cached: Resolved?
+
+    /// 찾은 경로만 캐시한다. 못 찾았으면 다음 호출에서 다시 찾으므로 설치 후 앱을 재시작할 필요가 없다.
+    private static func resolvedEnvironment() -> Resolved? {
+        lock.lock()
+        defer { lock.unlock() }
+        if cached == nil { cached = resolve() }
+        return cached
+    }
 
     static func ask(prompt: String) async throws -> String {
-        guard let resolved else { throw ClaudeError.notFound }
+        guard let resolved = resolvedEnvironment() else { throw ClaudeError.notFound }
 
         let process = Process()
         process.executableURL = URL(fileURLWithPath: resolved.executable)

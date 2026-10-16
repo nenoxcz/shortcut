@@ -15,8 +15,11 @@ final class AppModel: ObservableObject {
     private var analysisTask: Task<Void, Never>?
     /// 마지막으로 Claude에 보낸(또는 분석 중인) 문제의 정규화된 줄 목록
     private var lastAnalyzedLines: [String] = []
+    /// Claude 호출이 실패하면 이 시각 이후에 같은 문제를 다시 시도한다
+    private var retryAt: Date?
 
     private static let interval: Duration = .seconds(5)
+    private static let retryDelay: TimeInterval = 30
     private static let minQuestionLength = 8
 
     init() {
@@ -42,6 +45,7 @@ final class AppModel: ObservableObject {
         }
         isRunning = true
         lastAnalyzedLines = []
+        retryAt = nil
         menuBarText = "…"
         status = "실행 중"
         loopTask = Task { [weak self] in
@@ -100,8 +104,11 @@ final class AppModel: ObservableObject {
                 if analysisTask == nil { status = "문제 텍스트 없음" }
                 return
             }
+            if let retryAt, analysisTask == nil, Date() >= retryAt {
+                lastAnalyzedLines = []
+            }
             guard TextUtil.isNewQuestion(current: lines, previous: lastAnalyzedLines) else {
-                if analysisTask == nil { status = "변화 없음" }
+                if analysisTask == nil, retryAt == nil { status = "변화 없음" }
                 return
             }
             // 분석 중에 문제가 바뀌면 이전 분석을 버리고 즉시 새 문제를 분석한다
@@ -128,6 +135,7 @@ final class AppModel: ObservableObject {
 
     private func analyze(text: String, lines: [String]) {
         lastAnalyzedLines = lines
+        retryAt = nil
         menuBarText = "…"
         status = "Claude 분석 중…"
         analysisTask = Task { [weak self] in
@@ -142,8 +150,15 @@ final class AppModel: ObservableObject {
             guard !Task.isCancelled, let self else { return }
             self.analysisTask = nil
             guard self.isRunning else { return }
-            self.menuBarText = answer
-            self.status = errorMessage.map { "Claude 오류: \($0)" } ?? "분석 완료: \(answer)"
+            if let errorMessage {
+                // "?"(판단 불가)와 구분되도록 실행 오류는 ⚠︎로 표시하고 잠시 뒤 재시도
+                self.menuBarText = "⚠︎"
+                self.status = "Claude 오류: \(errorMessage)"
+                self.retryAt = Date().addingTimeInterval(Self.retryDelay)
+            } else {
+                self.menuBarText = answer
+                self.status = "분석 완료: \(answer)"
+            }
         }
     }
 }

@@ -31,7 +31,7 @@ final class RegionSelector {
             self?.finish(rect: rect, displayID: displayID)
         }
         window.contentView = view
-        NSApp.activate(ignoringOtherApps: true)
+        NSApp.activate()
         window.makeKeyAndOrderFront(nil)
         window.makeFirstResponder(view)
         NSCursor.crosshair.push()

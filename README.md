@@ -29,9 +29,9 @@ open build/StudyHelper.app
 |---|---|
 | `ScreenCapturer.swift` | ScreenCaptureKit(`SCScreenshotManager`)으로 Retina 해상도 캡처 후 선택 영역을 자름 |
 | `TextRecognizer.swift` | Vision `VNRecognizeTextRequest`(ko-KR, en-US, accurate) |
-| `AppModel.swift` | 5초 루프. 공백·문장부호를 뺀 텍스트의 바이그램 유사도가 0.93 미만일 때만 새 문제로 판단 |
+| `AppModel.swift` | 5초 루프. 전체 화면 모드에서는 메뉴 막대를 빼고 캡처. 분석 중 문제가 바뀌면 즉시 재분석 |
+| `Analysis.swift` | 줄 단위로 비교해 새 줄이 생기면 새 문제로 판단(숫자만 바뀐 줄 1개, 예: 타이머는 무시). 프롬프트·응답 파싱(`정답: ③` → `③`, `3번` → `③`) |
 | `ClaudeRunner.swift` | 로그인 셸에서 `claude` 경로와 PATH를 찾아 `claude -p` 실행(120초 타임아웃) |
-| `Analysis.swift` | 프롬프트와 응답 파싱(`정답: ③` → `③`, `3번` → `③`) |
 | `RegionSelector.swift` | 드래그로 캡처 영역을 고르는 오버레이 |
 
 ## 문제 해결
